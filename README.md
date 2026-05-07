@@ -4,7 +4,7 @@
 
 This project performs an end-to-end business intelligence analysis on the **Superstore Retail Dataset** using T-SQL (SQL Server). The goal is to extract actionable insights across sales performance, customer behaviour, product profitability, and growth trends — simulating the type of analysis a Data Analyst would deliver in a real business environment.
 
-The dataset contains **13,000+ transactional records** spanning orders, customers, products, and geography. The data pipeline is built on a **Medallion Architecture** with three layers — Bronze, Silver, and Gold — before analysis is performed on the final Gold layer using a **star schema** across five tables.
+The dataset contains **13K+ transactional records** spanning orders, customers, products, and geography. The data pipeline is built on a **Medallion Architecture** with three layers — Bronze, Silver, and Gold — before analysis is performed on the final Gold layer using a **star schema** across five tables.
 
 ---
 
@@ -29,7 +29,7 @@ This project follows the **Medallion Architecture** (also called Multi-Hop Archi
 ### 🥉 Bronze Layer — Raw Data Ingestion
 The raw CSV data is loaded **as-is** directly into the Bronze schema with no transformations. This preserves the original source data exactly as received, including any nulls, duplicates, inconsistent formatting, and data type issues.
 
-- Source: `Superstore_Messy_Data.csv` (13,000+ rows)
+- Source: `Superstore_Messy_Data.csv` (13K+ rows)
 - No cleaning or transformation applied
 - Acts as the single source of truth / audit log
 - Table: `bronze.Superstore_Messy_Data`
