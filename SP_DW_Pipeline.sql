@@ -14,7 +14,7 @@
 
    VERIFIED FINAL EXPECTED VALUES:
    ┌─────────────────────────────────┬────────────────┐
-   │ Table / Metric                  │ Expected Value  │
+   │ Table / Metric                  │ Expected Value │
    ├─────────────────────────────────┼────────────────┤
    │ bronze.Superstore_Messy_Data    │ 13,194 rows    │
    │ silver.Superstore_cleansed      │  9,986 rows    │
