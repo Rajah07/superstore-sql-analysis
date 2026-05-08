@@ -2,7 +2,7 @@
    PROJECT  : Superstore Retail Sales Analysis
    AUTHOR   : Sarfraj Alam
    DATABASE : SQL Server (T-SQL)
-   DATASET  : Superstore Sales (13,000+ transactions)
+   DATASET  : Superstore Sales (13K+ transactions)
    SCHEMA   : gold.fact_sales | gold.dim_geography
               gold.dim_product | gold.dim_customer
    TOPICS   : KPIs, Growth Analysis, Seasonality,
@@ -18,7 +18,7 @@
 SELECT
     ROUND(SUM(sales), 2)                                    AS total_sales,
     ROUND(SUM(profit), 2)                                   AS total_profit,
-    ROUND(SUM(profit) * 100.0 / SUM(sales), 2)             AS profit_margin_pct,
+    FORMAT(SUM(profit) / SUM(sales), 'P')             AS profit_margin_pct,
     ROUND(SUM(sales) / COUNT(DISTINCT order_id), 2)         AS avg_order_value
 FROM gold.fact_sales;
 
@@ -33,8 +33,8 @@ SELECT
     sales_by_region,
     profit_by_region,
     total_sales,
-    CAST(sales_by_region * 100.0 / total_sales AS INT)      AS sales_contribution_pct,
-    CAST(profit_by_region * 100.0 / sales_by_region AS INT) AS profit_margin_pct
+    FORMAT(sales_by_region / total_sales, 'P')      AS sales_contribution_pct,
+    FORMAT(profit_by_region / sales_by_region, 'P') AS profit_margin_pct
 FROM (
     SELECT
         g.region,
@@ -73,11 +73,11 @@ SELECT
     c.segment,
     ROUND(SUM(f.sales), 2)                              AS total_sales,
     ROUND(SUM(f.profit), 2)                             AS total_profit,
-    ROUND(SUM(f.profit) * 100.0 / SUM(f.sales), 2)     AS profit_margin_pct,
+    FORMAT(SUM(f.profit) / SUM(f.sales), 'P')           AS profit_margin_pct,
     COUNT(DISTINCT f.order_id)                          AS total_orders,
     COUNT(DISTINCT f.customer_id)                       AS total_customers
 FROM gold.fact_sales f
-JOIN gold.dim_customer c ON c.customer_key = f.customer_key
+JOIN gold.dim_customer c ON c.Customer_ID = f.customer_ID
 GROUP BY c.segment
 ORDER BY total_sales DESC;
 
@@ -101,10 +101,10 @@ SELECT
     ROUND(total_profit, 2)                                                              AS total_profit,
     ROUND(LAG(total_sales)  OVER (ORDER BY yr), 2)                                      AS prev_yr_sales,
     ROUND(LAG(total_profit) OVER (ORDER BY yr), 2)                                      AS prev_yr_profit,
-    ROUND(100.0 * (total_sales  - LAG(total_sales)  OVER (ORDER BY yr))
-                / LAG(total_sales)  OVER (ORDER BY yr), 2)                              AS sales_growth_pct,
-    ROUND(100.0 * (total_profit - LAG(total_profit) OVER (ORDER BY yr))
-                / LAG(total_profit) OVER (ORDER BY yr), 2)                              AS profit_growth_pct
+    FORMAT((total_sales  - LAG(total_sales)  OVER (ORDER BY yr))
+                / LAG(total_sales)  OVER (ORDER BY yr), 'P')                              AS sales_growth_pct,
+    FORMAT((total_profit - LAG(total_profit) OVER (ORDER BY yr))
+                / LAG(total_profit) OVER (ORDER BY yr), 'P')                              AS profit_growth_pct
 FROM yearly_metrics
 ORDER BY yr;
 
@@ -116,9 +116,9 @@ ORDER BY yr;
    ============================================================ */
 
 SELECT
-    ROUND(
-        (POWER(latest_yr_sale * 1.0 / first_yr_sale, 1.0 / t) - 1) * 100.0,
-    2) AS cagr_pct
+    FORMAT(
+        (POWER(latest_yr_sale * 1.0 / first_yr_sale, 1.0 / t) - 1),
+    'P') AS cagr_pct
 FROM (
     SELECT
         (SELECT MAX(YEAR(order_date)) - MIN(YEAR(order_date)) FROM gold.fact_sales)  AS t,
@@ -185,8 +185,8 @@ SELECT
         ELSE 'Loyal Buyer'
     END                                 AS customer_type,
     COUNT(*)                            AS customer_count,
-    ROUND(COUNT(*) * 100.0
-        / SUM(COUNT(*)) OVER (), 2)     AS pct_of_total
+    FORMAT(COUNT(*)
+        / SUM(COUNT(*)) OVER (), 'P')     AS pct_of_total
 FROM customer_orders
 GROUP BY
     CASE
@@ -341,13 +341,13 @@ SELECT
     c.segment,
     ROUND(SUM(f.sales), 2)                                  AS total_sales,
     ROUND(SUM(f.profit), 2)                                 AS total_profit,
-    ROUND(SUM(f.profit) * 100.0 / SUM(f.sales), 2)         AS profit_margin_pct,
-    ROUND(
-        LAG(SUM(f.profit) * 100.0 / SUM(f.sales))
+    FORMAT(SUM(f.profit) / SUM(f.sales), 'P')         AS profit_margin_pct,
+    FORMAT(
+        LAG(SUM(f.profit) / SUM(f.sales))
             OVER (PARTITION BY c.segment ORDER BY YEAR(f.order_date)),
-    2)                                                      AS prev_yr_margin_pct
+    'P')                                                      AS prev_yr_margin_pct
 FROM gold.fact_sales f
-JOIN gold.dim_customer c ON c.customer_key = f.customer_key
+JOIN gold.dim_customer c ON c.Customer_ID = f.customer_ID
 GROUP BY YEAR(f.order_date), c.segment
 ORDER BY c.segment, yr;
 
@@ -404,7 +404,7 @@ SELECT
     p.sub_category,
     ROUND(SUM(f.sales), 2)                              AS total_sales,
     ROUND(SUM(f.profit), 2)                             AS total_profit,
-    ROUND(SUM(f.profit) * 100.0 / SUM(f.sales), 2)     AS profit_margin_pct,
+    FORMAT(SUM(f.profit) / SUM(f.sales), 'P')           AS profit_margin_pct,
     COUNT(DISTINCT f.order_id)                          AS total_orders,
     CASE
         WHEN SUM(f.profit) < 0 THEN 'Loss-Making'
