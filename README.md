@@ -1,286 +1,314 @@
-# 🛒 Superstore Retail Sales Analysis — SQL Project
+# 🛒 Superstore Retail Sales Analysis
 
-## 📌 Project Overview
+> End-to-end SQL data warehouse project — from messy raw CSV to a clean star schema with 15 business analyses.
 
-This project performs an end-to-end business intelligence analysis on the **Superstore Retail Dataset** using T-SQL (SQL Server). The goal is to extract actionable insights across sales performance, customer behaviour, product profitability, and growth trends — simulating the type of analysis a Data Analyst would deliver in a real business environment.
-
-The dataset contains **13K+ transactional records** spanning orders, customers, products, and geography. The data pipeline is built on a **Medallion Architecture** with three layers — Bronze, Silver, and Gold — before analysis is performed on the final Gold layer using a **star schema** across five tables.
+![SQL Server](https://img.shields.io/badge/SQL%20Server-T--SQL-CC2927?style=flat-square&logo=microsoftsqlserver&logoColor=white)
+![Architecture](https://img.shields.io/badge/Architecture-Medallion%20%28Bronze%20→%20Silver%20→%20Gold%29-F5A623?style=flat-square)
+![Rows](https://img.shields.io/badge/Dataset-13%2C194%20rows-4CAF50?style=flat-square)
+![Status](https://img.shields.io/badge/Status-Completed-brightgreen?style=flat-square)
 
 ---
 
-## 🏗️ Data Architecture — Medallion Architecture
+## 📑 Table of Contents
 
-This project follows the **Medallion Architecture** (also called Multi-Hop Architecture), an industry-standard data engineering pattern used in modern data warehouses and lakehouses. It organizes data into three progressive layers, each improving the quality and structure of the data.
+- [Project Overview](#project-overview)
+- [Architecture](#architecture)
+- [Dataset & Data Quality Issues](#dataset--data-quality-issues)
+- [ETL Pipeline](#etl-pipeline)
+- [Star Schema](#star-schema)
+- [Analysis Sections](#analysis-sections)
+- [Key Findings](#key-findings)
+- [Project Files](#project-files)
+- [How to Run](#how-to-run)
+- [Validation Checks](#validation-checks)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    MEDALLION ARCHITECTURE                       │
-│                                                                 │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────────┐ │
-│  │  🥉 BRONZE   │───▶│  🥈 SILVER   │───▶│     🥇 GOLD     │  │
-│  │   Raw Layer  │     │ Clean Layer  │     │  Business Layer  │ │
-│  └──────────────┘     └──────────────┘     └──────────────────┘ │
-│   Load as-is from     Clean, dedupe,      Separate into small   │
-│   source (CSV)        transform data      dimension tables +    │
-│                                           fact table            │
-└─────────────────────────────────────────────────────────────────┘
-```
+---
 
-### 🥉 Bronze Layer — Raw Data Ingestion
-The raw CSV data is loaded **as-is** directly into the Bronze schema with no transformations. This preserves the original source data exactly as received, including any nulls, duplicates, inconsistent formatting, and data type issues.
+## Project Overview
 
-- Source: `Superstore_Messy_Data.csv` (13K+ rows)
-- No cleaning or transformation applied
-- Acts as the single source of truth / audit log
-- Table: `bronze.Superstore_Messy_Data`
+This project builds a complete **data warehouse** on top of the Superstore retail dataset using **MS SQL Server** and **T-SQL**. It follows the **Medallion Architecture** pattern (Bronze → Silver → Gold) to ingest raw messy data, clean and transform it, model it into a star schema, and run 15 analytical queries covering business KPIs, growth analysis, customer segmentation, churn, Pareto, and RFM scoring.
 
-### 🥈 Silver Layer — Data Cleaning & Transformation
-The Bronze data is cleaned and transformed before loading into the Silver schema. This layer produces a **reliable, consistent** dataset ready for analysis.
-
-Cleaning steps performed:
-- Removed duplicate records
-- Standardized date formats (`Order Date`, `Ship Date`)
-- Handled NULL and missing values
-- Corrected data types (e.g., Sales and Profit as `FLOAT`, dates as `DATE`)
-- Trimmed whitespace from string columns
-- Validated referential integrity across columns
-
-- Table: `silver.Superstore_cleansed`
-
-### 🥇 Gold Layer — Business-Ready Star Schema
-The cleaned Silver data is **split into small, focused dimension tables** and one central fact table. This is the layer where all SQL analysis is performed.
-
-| Table | Type | Contains |
-|---|---|---|
-| `gold.fact_sales` | Fact Table | Orders, Sales, Profit, Discount, Quantity, foreign keys |
-| `gold.dim_customer` | Dimension | Customer ID, Name, Segment |
-| `gold.dim_product` | Dimension | Product ID, Name, Category, Sub-Category |
-| `gold.dim_geography` | Dimension | Region, City, State, Postal Code |
-| `gold.dim_date` | Dimension | Date, Year, Month, Quarter (date intelligence) |
-
-**Why star schema?** By separating data into one fact table and multiple dimension tables, queries become faster, joins are simpler, and the model scales well for reporting tools like Power BI.
-
-### Why Medallion Architecture?
-
-| Benefit | Explanation |
+| Metric | Value |
 |---|---|
-| **Data traceability** | Raw data is never overwritten — always available in Bronze for debugging |
-| **Separation of concerns** | Cleaning logic lives in Silver; business logic lives in Gold |
-| **Industry standard** | Used by companies like Microsoft, Databricks, and most modern data teams |
-| **Scalable** | New data sources can be added at Bronze without affecting downstream layers |
+| Raw rows ingested | 13,194 |
+| Rows after cleaning | 9,986 |
+| Duplicates removed | 3,208 |
+| Unique orders | 5,008 |
+| Unique customers | 793 |
+| Unique products | 1,862 |
+| Date range | 2014 – 2017 |
+| Total sales | $2,458,300 |
+| Total profit | $285,860 |
+| Profit margin | 11.63% |
 
 ---
 
-## 🗂️ Dataset Schema
+## Architecture
 
-| Table | Type | Description |
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    superstoreDW Database                    │
+├──────────────┬──────────────────────┬───────────────────────┤
+│   BRONZE     │       SILVER         │         GOLD          │
+│  Raw layer   │   Cleaned layer      │    Business layer     │
+│              │                      │                       │
+│  13,194 rows │    9,986 rows        │  Star Schema          │
+│  All NVARCHAR│  Correct types       │  dim_customer  (793)  │
+│  Nulls       │  Nulls fixed         │  dim_product  (1862)  │
+│  Duplicates  │  Deduped             │  dim_geography (631)  │
+│  Typos       │  Typos fixed         │  dim_date     (1237)  │
+│  Bad casing  │  Casing normalized   │  fact_sales   (9986)  │
+└──────────────┴──────────────────────┴───────────────────────┘
+```
+
+---
+
+## Dataset & Data Quality Issues
+
+The raw CSV (`Superstore_Messy_Data.csv`) contained **5 categories of data quality issues** that were identified and fixed in the Silver layer:
+
+| # | Issue | Rows Affected | Fix Applied |
+|---|---|---|---|
+| 1 | Wrong data types (all imported as `NVARCHAR`) | All columns | `ALTER COLUMN` to correct types |
+| 2 | `NULL` in `Customer_Name` | 401 rows | Replaced with `'Unknown'` |
+| 3 | Inconsistent `City`/`State` casing (`NEW YORK`, `new york`, `New York`) | Many | Double-pass `UPPER(LEFT()) + LOWER(SUBSTRING())` |
+| 4 | `City = 'NONE'` or empty string | 407 rows | Replaced with `'Unknown'` |
+| 5 | `Order_ID` stored in `State` column by mistake | 1 row | Corrected to `'Arkansas'` |
+| 6 | Typos in `Category` column | 1,275 rows | `'Technlogy'` → `'Technology'`, `'Furnture'` → `'Furniture'` |
+| 7 | Duplicate records (same `Order_ID` + `Product_ID`) | 3,208 rows | Removed via `ROW_NUMBER()` CTE, kept earliest |
+
+> ⚠️ **Key insight on the double casing pass:** The casing normalization runs twice intentionally. The first pass normalizes all rows; the second pass re-runs after the State data-entry error is corrected, ensuring the fixed Arkansas row also gets consistent casing. Skipping the second pass causes 6 extra rows in `dim_geography` (632 vs 626) due to residual casing mismatches in multi-word city names like `Los Angeles`.
+
+---
+
+## ETL Pipeline
+
+The pipeline is executed in **6 sequential steps** inside `SP_DW_Pipeline.sql`:
+
+```
+Step 1 — Database & Schema Setup
+         CREATE DATABASE superstoreDW
+         CREATE SCHEMA bronze | silver | gold
+
+Step 2 — Bronze Layer
+         Import CSV as-is via SSMS Import Flat File wizard
+         No transformations — raw data preserved exactly
+
+Step 3 — Silver Layer (Data Cleaning)
+         3a  Fix data types
+         3b  Fix NULL Customer_Name (401 rows)
+         3c  Fix City/State casing + data entry error (double pass)
+         3d  Fix Category typos (1,275 rows)
+         3e  Remove duplicates via ROW_NUMBER() CTE (3,208 rows)
+
+Step 4 — Gold Layer (Star Schema)
+         4a  dim_customer   — deduplicated by Customer_ID
+         4b  dim_product    — canonical name per Product_ID
+         4c  dim_geography  — built AFTER double casing pass
+         4d  dim_date       — one row per unique Order_Date
+         4e  fact_sales     — measures + surrogate FK keys
+
+Step 5 — Constraints
+         Primary Keys on all dimension tables
+         Foreign Keys on fact_sales → all dimensions
+
+Step 6 — Validation
+         Row counts, sales totals, profit totals, NULL FK checks
+```
+
+---
+
+## Star Schema
+
+```
+                    ┌─────────────────┐
+                    │   dim_date      │
+                    │─────────────────│
+                    │ Order_Date (PK) │
+                    │ Year            │
+                    │ Month           │
+                    └────────┬────────┘
+                             │ FK
+┌──────────────────┐    ┌────┴───────────────┐    ┌─────────────────┐
+│   dim_customer   │    │    fact_sales       │    │   dim_product   │
+│──────────────────│    │────────────────────│    │─────────────────│
+│ Customer_ID (PK) │◄───┤ Customer_ID (FK)   │    │ Product_Key (PK)│
+│ Customer_Name    │    │ Product_Key (FK)   ├───►│ Product_ID      │
+│ Segment          │    │ Geo_Key (FK)        │    │ Product_Name    │
+└──────────────────┘    │ Order_Date (FK)     │    │ Category        │
+                        │────────────────────│    │ Sub_Category    │
+┌──────────────────┐    │ Order_ID           │    └─────────────────┘
+│  dim_geography   │    │ Sales              │
+│──────────────────│    │ Quantity           │
+│ Geo_Key (PK)     │◄───┤ Profit             │
+│ City             │    │ Discount           │
+│ State            │    └────────────────────┘
+│ Region           │
+│ Country          │
+└──────────────────┘
+```
+
+---
+
+## Analysis Sections
+
+The `Superstore_Data_Analysis.sql` file contains **15 analytical queries** against the Gold layer:
+
+| Section | Topic | Techniques Used |
 |---|---|---|
-| `gold.fact_sales` | Fact | Core transactional data — orders, sales, profit, discount, quantity |
-| `gold.dim_customer` | Dimension | Customer ID, name, segment (Consumer, Corporate, Home Office) |
-| `gold.dim_product` | Dimension | Product ID, name, category, sub-category |
-| `gold.dim_geography` | Dimension | Region, city, state, postal code |
-| `gold.dim_date` | Dimension | Date attributes — year, month, quarter for time-based analysis |
+| §1 | Business KPIs | `SUM`, `COUNT DISTINCT`, `ROUND` |
+| §2 | Regional performance | Subquery, sales contribution % |
+| §3 | Category performance | `GROUP BY`, `AVG`, `ORDER BY` |
+| §4 | Segment-wise performance | Multi-measure aggregation |
+| §5 | Year-over-year growth | `LAG()` window function |
+| §6 | CAGR calculation | `POWER()`, nested subqueries |
+| §7 | Peak season analysis | `DATENAME`, `RANK()`, CTEs |
+| §8 | Repeat vs one-time customers | `CASE WHEN`, `COUNT DISTINCT` |
+| §9 | Top 5% customers by revenue | `NTILE(100)`, percentile ranking |
+| §10 | Running total of sales | `SUM() OVER (ROWS UNBOUNDED PRECEDING)` |
+| §11 | Pareto analysis (80/20 rule) | Running sum, 80% threshold filter |
+| §12 | Year-over-year customer churn | `LEFT JOIN` self-join by year |
+| §13 | YoY profit margin by segment | `LAG()` partitioned by segment |
+| §14 | RFM analysis | `DATEDIFF`, `NTILE(5)`, composite scoring |
+| §15 | Sub-category profitability | `CASE WHEN` margin classification |
 
 ---
 
-## 🎯 Business Questions Answered
+## Key Findings
 
-1. What are the overall KPIs — total revenue, profit, and average order value?
-2. Which regions contribute the most to sales and profit?
-3. Which product categories and sub-categories are most/least profitable?
-4. How has sales and profit grown year over year?
-5. What is the Compound Annual Growth Rate (CAGR) of the business?
-6. Which months are peak sales seasons?
-7. What percentage of customers and products drive 80% of revenue? (Pareto)
-8. How many customers churn each year, and what is the churn rate?
-9. Who are the top 5% highest-value customers?
-10. How can customers be segmented using RFM scoring?
-
----
-
-## 📊 Analysis Sections
-
-### Section 1 — Business KPIs
-Calculated the four headline metrics every business tracks: **Total Sales**, **Total Profit**, **Profit Margin %**, and **Average Order Value (AOV)** using aggregate functions across all transactions.
-
-```sql
-SELECT
-    ROUND(SUM(sales), 2) AS total_sales,
-    ROUND(SUM(profit) * 100.0 / SUM(sales), 2) AS profit_margin_pct,
-    ROUND(SUM(sales) / COUNT(DISTINCT order_id), 2) AS avg_order_value
-FROM gold.fact_sales;
-```
-
----
-
-### Section 2 — Regional Performance
-Joined `fact_sales` with `dim_geography` to calculate **sales contribution %** and **profit margin** per region. Used a subquery to compute the total sales baseline for percentage calculations.
-
-**Key insight:** Identifies which regions are high-revenue but low-margin — a critical input for regional budget allocation.
-
----
-
-### Section 3 — Category Performance
-Grouped sales and profit by product category, calculating total orders, total revenue, and **average profit per category**. Helps identify which categories contribute most to the bottom line.
-
----
-
-### Section 4 — Segment-Wise Performance
-Broke down sales, profit, margin, and customer count by **customer segment** (Consumer, Corporate, Home Office). Useful for understanding which segment is most valuable and which needs growth attention.
-
----
-
-### Section 5 — Year-over-Year Growth
-Used the **`LAG()` window function** to compare each year's sales and profit against the previous year, computing **YoY growth %** for both metrics.
-
-```sql
-ROUND(100.0 * (total_sales - LAG(total_sales) OVER (ORDER BY yr))
-            / LAG(total_sales) OVER (ORDER BY yr), 2) AS sales_growth_pct
-```
-
-**Technique:** `LAG()` retrieves the value from the previous row in the ordered result set — ideal for period-over-period comparisons without a self-join.
-
----
-
-### Section 6 — CAGR (Compound Annual Growth Rate)
-Computed the **CAGR** of the business using first-year and latest-year sales, and the time period in years. Uses scalar subqueries nested inside a derived table.
-
-**Formula:** `CAGR = (Latest Year Sales / First Year Sales) ^ (1/t) - 1`
-
-CAGR gives a single smoothed annual growth rate, removing year-to-year volatility — commonly used in business performance reports.
-
----
-
-### Section 7 — Peak Season Analysis
-Identified the **top 4 revenue months per year** using a **multi-level CTE** with `RANK()` partitioned by year, then aggregated across years to find which months most frequently appear as peak sales months.
-
-```sql
-RANK() OVER (PARTITION BY yr ORDER BY monthly_sales DESC) AS rnk
-```
-
-**Output:** A ranked list of months by how often they appear in the top 4, helping with demand planning and inventory strategy.
-
----
-
-### Section 8 — Repeat vs One-Time Customers
-Classified every customer into **One-Time Buyer**, **Occasional Buyer**, or **Loyal Buyer** based on their total order count, using a `CASE` expression with percentage-of-total calculated via `SUM() OVER()`.
-
-**Business value:** Understanding purchase frequency distribution helps retention teams prioritize which customer tier to target.
-
----
-
-### Section 9 — Top 5% Customers by Revenue
-Used **`NTILE(100)`** to divide customers into 100 percentile buckets by total spend, then filtered the top 5 percentiles and joined with `dim_customer` to retrieve customer names.
-
-**Technique:** `NTILE()` is a distribution window function — cleaner than a self-join percentile approach and scales well on large datasets.
-
----
-
-### Section 10 — Running Total of Sales Within Category
-Computed a **cumulative running total of sales** per product category ordered by date, using a bounded window frame:
-
-```sql
-SUM(f.sales) OVER (
-    PARTITION BY p.category
-    ORDER BY f.order_date, f.order_id
-    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-)
-```
-
-This is used in trend analysis to see how sales accumulate over time within each product line.
-
----
-
-### Section 11 — Pareto Analysis (80/20 Rule)
-Answered: **"What % of customers drive 80% of revenue?"** and repeated for products.
-
-Used `SUM() OVER (ORDER BY ...)` to build a running total, then filtered where the running total was ≤ 80% of total sales, and calculated what fraction of total customers/products that represents.
-
-**Why it matters:** In most retail businesses, a small minority of customers and products drive the majority of revenue. Pareto analysis quantifies this and guides where to focus retention and marketing effort.
-
----
-
-### Section 12 — Year-over-Year Customer Churn
-Built a **churn model using a self-join** — identified customers present in year N who did NOT appear in year N+1, labelling them as churned.
-
-```sql
-LEFT JOIN (...) t2
-    ON t1.customer_id = t2.repeated_id
-    AND t1.current_yr  = t2.next_yr - 1
-```
-
-Calculated churned customers, retained customers, and **churn rate %** for each year. Excluded the final year (no "next year" to compare against).
-
----
-
-### Section 13 — YoY Profit Margin by Segment
-Combined `GROUP BY` with `LAG()` partitioned by segment to track how **profit margins evolved year-over-year for each customer segment**. Helps detect if a segment is becoming less profitable over time.
-
----
-
-### Section 14 — RFM Analysis
-Built a full **RFM (Recency, Frequency, Monetary) customer scoring model**:
-
-| Dimension | Definition | Scoring |
-|---|---|---|
-| **Recency** | Days since last purchase | Lower = better (score 5) |
-| **Frequency** | Number of distinct orders | Higher = better (score 5) |
-| **Monetary** | Total revenue generated | Higher = better (score 5) |
-
-Used `NTILE(5)` to score each customer 1–5 on all three dimensions, then summed scores and applied a segment label (Champion, Loyal Customer, Recent Customer, At-Risk Loyal, Needs Attention).
-
-**Why RFM:** It is the most widely used customer segmentation model in retail analytics, enabling targeted marketing, re-engagement campaigns, and VIP identification.
-
----
-
-### Section 15 — Sub-Category Profitability Deep Dive
-Analysed profit margin at the **sub-category level** and labelled each as Loss-Making, Low Margin, Moderate Margin, or High Margin using a `CASE` expression.
-
-**Key insight:** Some sub-categories may have high sales volume but negative profit — important for pricing and product discontinuation decisions.
-
----
-
-## 🛠️ SQL Techniques Used
-
-| Technique | Used In |
+### 💰 Business KPIs
+| Metric | Value |
 |---|---|
-| Aggregate Functions (`SUM`, `AVG`, `COUNT`) | Sections 1, 2, 3, 4 |
-| Window Functions (`LAG`, `RANK`, `NTILE`, `SUM OVER`) | Sections 5, 7, 9, 10, 11, 13, 14 |
-| Common Table Expressions (CTEs) | Sections 5, 7, 8, 9, 11, 12, 14 |
-| Multi-table JOINs (Star Schema) | Sections 2, 3, 4, 9, 10, 13, 14, 15 |
-| Subqueries (Scalar & Correlated) | Sections 2, 6, 11, 12 |
-| Self-Join | Section 12 |
-| CASE Expressions | Sections 8, 14, 15 |
-| Date Functions (`YEAR`, `DATEDIFF`, `DATENAME`, `EOMONTH`) | Sections 5, 6, 7, 12, 13, 14 |
-| `FORMAT` for percentage display | Sections 8, 11, 12 |
-| `POWER` for CAGR formula | Section 6 |
+| Total Sales | $2,458,300 |
+| Total Profit | $285,860 |
+| Profit Margin | 11.63% |
+| Average Order Value | $490.87 |
+| CAGR (2014–2017) | **15.92%** |
 
 ---
 
-## 📁 Repository Structure
+### 🗺️ Regional Performance
+| Region | Sales | Share | Margin |
+|---|---|---|---|
+| West | $786,410 | 32.0% | 13.8% |
+| East | $726,301 | 29.5% | 12.6% |
+| Central | $530,229 | 21.6% | 7.5% ⚠️ |
+| South | $415,360 | 16.9% | 11.2% |
+
+> Central region has the weakest margin at 7.5% despite contributing 21.6% of sales.
+
+---
+
+### 📦 Category Performance
+| Category | Sales | Profit | Avg Profit/Order |
+|---|---|---|---|
+| Technology | $898,182 | $145,368 | $78.79 |
+| Furniture | $818,654 | $18,380 | $8.67 ⚠️ |
+| Office Supplies | $741,464 | $122,112 | $20.28 |
+
+> Furniture generates nearly as much sales as Technology but only 12% of the profit.
+
+---
+
+### 📈 Year-over-Year Growth
+| Year | Sales | Profit | Sales Growth | Profit Growth |
+|---|---|---|---|---|
+| 2014 | $500,872 | $49,556 | — | — |
+| 2015 | $508,688 | $61,556 | +1.56% | +24.22% |
+| 2016 | $668,612 | $81,477 | **+31.44%** | +32.36% |
+| 2017 | $780,128 | $93,271 | +16.68% | +14.48% |
+
+---
+
+### 🗓️ Peak Season
+November, September, and December appeared in the **top 4 revenue months every single year** (4 of 4).
+
+| Month | Peak Frequency | Avg Peak Sales |
+|---|---|---|
+| November | 4 / 4 ⭐ | $95,320 |
+| September | 4 / 4 ⭐ | $87,914 |
+| December | 4 / 4 ⭐ | $83,012 |
+
+---
+
+### 👥 Customer Segmentation
+| Type | Count | % of Total |
+|---|---|---|
+| Loyal Buyer (5+ orders) | 598 | 75.41% |
+| Occasional Buyer (2–4 orders) | 183 | 23.08% |
+| One-Time Buyer | 12 | 1.51% |
+
+---
+
+### 📉 Customer Churn (YoY)
+| Year | Total | Retained | Churned | Churn Rate |
+|---|---|---|---|---|
+| 2014 | 595 | 437 | 158 | 26.55% |
+| 2015 | 573 | 452 | 121 | 21.12% |
+| 2016 | 638 | 558 | 80 | **12.54%** ✅ |
+
+> Churn improved by more than half over 3 years — strong retention trend.
+
+---
+
+### 🔴 Loss-Making Sub-Categories
+| Sub-Category | Sales | Profit | Margin |
+|---|---|---|---|
+| Tables | $239,453 | −$17,725 | −7.4% |
+| Bookcases | $125,629 | −$3,473 | −2.8% |
+| Supplies | $46,816 | −$1,189 | −2.5% |
+
+> Tables is the most damaging — $239K in sales that result in a net loss. Discount strategy or pricing needs review.
+
+---
+
+## Project Files
 
 ```
-superstore-sql-analysis/
-├── Superstore_Data_Analysis.sql    # Full SQL analysis (15 sections)
-├── Superstore_Messy_Data.csv       # Raw dataset (13,000+ rows)
-└── README.md                       # Project documentation
+📁 superstore-dw/
+├── Superstore_Messy_Data.csv       # Raw source dataset (13,194 rows, 21 columns)
+├── SP_DW_Pipeline.sql              # Full ETL pipeline: Bronze → Silver → Gold
+└── Superstore_Data_Analysis.sql    # 15 analytical queries against gold schema
 ```
 
 ---
 
-## 💡 Key Business Insights (Summary)
+## How to Run
 
-- A small subset of customers and products follow the **80/20 rule** — most revenue is concentrated in a minority
-- **Churn analysis** reveals year-wise customer retention health, enabling proactive re-engagement
-- **CAGR** provides a single growth metric that smooths annual volatility
-- **RFM scoring** segments customers into actionable tiers for targeted marketing
-- Some sub-categories are **loss-making** despite high order volumes — highlighting pricing inefficiencies
+**Prerequisites:** Microsoft SQL Server (2016+) · SSMS
+
+```sql
+-- Step 1: Run Step 1 of SP_DW_Pipeline.sql to create the database and schemas
+-- Step 2: Import Superstore_Messy_Data.csv into bronze schema via SSMS:
+--         Right-click superstoreDW → Tasks → Import Flat File
+--         Set destination schema to [bronze]
+-- Step 3: Run Steps 3–6 of SP_DW_Pipeline.sql sequentially
+-- Step 4: Run Superstore_Data_Analysis.sql against the gold schema
+```
+
+> ⚠️ Do not drop and recreate the database without re-importing the CSV first — the Bronze layer depends on the flat file import being present.
 
 ---
 
-## 👤 Author
+## Validation Checks
 
-**Sarfraj Alam**
-📧 sarfraj7306@gmail.com
-🔗 [LinkedIn](https://linkedin.com/in/sarfraj-alam07) | [GitHub](https://github.com/Rajah07)
+All validation checks in Step 6 pass with the following expected values:
 
+| Check | Expected |
+|---|---|
+| `silver.Superstore_cleansed` rows | 9,986 |
+| `gold.fact_sales` rows | 9,986 |
+| Silver total sales | $2,347,314.26 |
+| Fact total sales | $2,347,314.26 |
+| Silver total profit | $286,025.36 |
+| NULL `Geo_Key` in fact | 0 |
+| NULL `Product_Key` in fact | 0 |
+| NULL `Customer_ID` in fact | 0 |
+| `dim_customer` rows | 793 |
+| `dim_product` rows | 1,862 |
+| `dim_geography` rows | 631 |
+| `dim_date` rows | 1,237 |
+
+---
+
+*Author: Sarfraj Alam · Database: MS SQL Server · Pattern: Medallion Architecture*
